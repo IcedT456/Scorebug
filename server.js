@@ -253,6 +253,15 @@ const server = http.createServer((req, res) => {
   res.writeHead(404); res.end('not found');
 });
 
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`\nPort ${PORT} is already in use. The score bug is probably already running in another window.\n`);
+  } else {
+    console.log('\nServer error:', err.message, '\n');
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log('\nScore bug running');
   console.log(`  Control panel: http://localhost:${PORT}/`);

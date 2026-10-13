@@ -333,6 +333,15 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
+// animate clip-path and commit the final value as a plain style when done
+function clip(el, from, to, opts) {
+  el.getAnimations().forEach(a => a.cancel());
+  el.style.clipPath = from;
+  const a = el.animate([{ clipPath: from }, { clipPath: to }], { ...opts, fill: 'both' });
+  a.onfinish = () => { el.style.clipPath = to; a.cancel(); };
+  return a;
+}
+
 // ---------- event animations ----------
 let lastEvent = null, tdTimer = null;
 
@@ -352,14 +361,11 @@ function playTouchdown(team) {
   clearTimeout(tdTimer);
   if (tdHold && tdHold !== team) roll(tdHold, S[tdHold].score);   // a new TD interrupts an old one
   tdHold = team;
-  flood.getAnimations().forEach(a => a.cancel());
   flood.classList.remove('on'); void flood.offsetWidth; flood.classList.add('on');
   wrap.classList.add('td');
-  flood.animate([{ clipPath: hiddenIn }, { clipPath: 'inset(0 0 0 0)' }],
-    { duration: 500, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
+  clip(flood, hiddenIn, 'inset(0 0 0 0)', { duration: 500, easing: 'cubic-bezier(.2,.8,.2,1)' });
   tdTimer = setTimeout(() => {
-    flood.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: hiddenOut }],
-      { duration: 500, easing: 'cubic-bezier(.6,0,.4,1)', fill: 'forwards' });
+    clip(flood, 'inset(0 0 0 0)', hiddenOut, { duration: 500, easing: 'cubic-bezier(.6,0,.4,1)' });
     wrap.classList.remove('td');
     setTimeout(() => {
       flood.classList.remove('on');
@@ -391,14 +397,13 @@ function playFill(kind) {
   wrap.style.setProperty('--ffg', f.fg);
   $('fillTxt').textContent = f.text;
   clearTimeout(fillTimer);
-  [top, bot].forEach(el => el.getAnimations().forEach(a => a.cancel()));
   top.classList.remove('on'); void top.offsetWidth; top.classList.add('on');
   wrap.classList.add('filling');
 
   const hidden = 'inset(100% 0 0 0)', full = 'inset(0 0 0 0)';
-  const rise = { easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' };
-  bot.animate([{ clipPath: hidden }, { clipPath: full }], { ...rise, duration: 220 });                // sub-bar first
-  top.animate([{ clipPath: hidden }, { clipPath: full }], { ...rise, duration: 420, delay: 180 });   // then the main bar
+  const rise = { easing: 'cubic-bezier(.4,0,.2,1)' };
+  clip(bot, hidden, full, { ...rise, duration: 220 });                // sub-bar first
+  clip(top, hidden, full, { ...rise, duration: 420, delay: 180 });   // then the main bar
 
   fillTimer = setTimeout(endFill, 3400);
 }
@@ -407,9 +412,9 @@ function endFill() {
   const top = $('fill'), bot = $('bfill');
   if (!top.classList.contains('on')) return;
   clearTimeout(fillTimer);
-  const drain = { easing: 'cubic-bezier(.6,0,.6,1)', fill: 'forwards' };
-  top.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(100% 0 0 0)' }], { ...drain, duration: 380 });
-  bot.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(100% 0 0 0)' }], { ...drain, duration: 220, delay: 300 });
+  const drain = { easing: 'cubic-bezier(.6,0,.6,1)' };
+  clip(top, 'inset(0 0 0 0)', 'inset(100% 0 0 0)', { ...drain, duration: 380 });
+  clip(bot, 'inset(0 0 0 0)', 'inset(100% 0 0 0)', { ...drain, duration: 220, delay: 300 });
   setTimeout(() => { top.classList.remove('on'); $('wrap').classList.remove('filling'); }, 520);
 }
 
