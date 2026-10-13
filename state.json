@@ -1,0 +1,39 @@
+{
+  "home": {
+    "name": "AWAY TEAM",
+    "color": "#bf5700",
+    "score": 0,
+    "timeouts": 3,
+    "rank": "",
+    "logo": ""
+  },
+  "away": {
+    "name": "HOME TEAM",
+    "color": "#bb0000",
+    "score": 0,
+    "timeouts": 3,
+    "rank": "",
+    "logo": ""
+  },
+  "period": 1,
+  "periodPrefix": "Q",
+  "status": "",
+  "clock": {
+    "mode": "down",
+    "lengthMs": 900000,
+    "baseMs": 0,
+    "startedAt": null
+  },
+  "possession": "",
+  "down": 1,
+  "distance": "10",
+  "showDown": true,
+  "alert": "",
+  "visible": true,
+  "event": {
+    "kind": "td",
+    "team": "home",
+    "id": 1791854646075,
+    "at": 1791854646075
+  }
+}

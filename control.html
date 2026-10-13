@@ -1,0 +1,390 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Score Control</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; background: #0d0f13; color: #e7e9ee;
+         font: 14px/1.3 system-ui, 'Segoe UI', Roboto, sans-serif; }
+  h2 { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #8a90a0; margin: 0 0 8px; }
+  .card { background: #161a21; border: 1px solid #232834; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row + .row { margin-top: 6px; }
+  .grow > * { flex: 1; }
+  button { background: #232936; color: #e7e9ee; border: 1px solid #2f3646; border-radius: 8px;
+           padding: 9px 10px; font: 600 14px system-ui, sans-serif; cursor: pointer; }
+  button:hover { background: #2b3242; }
+  button:active { transform: translateY(1px); }
+  button.big { font-size: 22px; padding: 12px 0; }
+  button.go { background: #15803d; border-color: #15803d; }
+  button.stop { background: #b91c1c; border-color: #b91c1c; }
+  button.warn { color: #fca5a5; }
+  button.on { background: #ffc72c; color: #111; border-color: #ffc72c; }
+  input, select { background: #0d0f13; color: #e7e9ee; border: 1px solid #2f3646; border-radius: 6px;
+                  padding: 8px; font: inherit; min-width: 0; }
+  input[type=color] { padding: 2px; height: 36px; width: 44px; flex: none; }
+  input[type=file] { display: none; }
+  .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .team { border-left: 4px solid var(--c, #555); padding-left: 10px; min-width: 0; }
+  .tname { font-weight: 800; letter-spacing: 1px; color: #c9ced8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score { font-size: 48px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+  .pips { display: flex; gap: 4px; justify-content: center; flex: 1; }
+  .pips i { width: 18px; height: 6px; background: #e7e9ee; border-radius: 2px; }
+  .pips i.used { opacity: .2; }
+  .clock { font-size: 52px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; margin: 0 0 8px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #dc2626; margin-right: 6px; }
+  .dot.ok { background: #22c55e; }
+  .muted { color: #8a90a0; font-size: 12px; }
+  .lbl { font-weight: 800; font-size: 18px; min-width: 64px; text-align: center; }
+  .tedit { display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .logo-prev { width: 36px; height: 36px; object-fit: contain; background: #0d0f13; border: 1px solid #2f3646; border-radius: 6px; flex: none; }
+  kbd { background: #232936; border: 1px solid #2f3646; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span class="muted"><span class="dot" id="dot"></span><span id="conn">Connecting</span></span>
+  <button id="visBtn">Hide bug</button>
+</div>
+
+<!-- SCORE -->
+<div class="card">
+  <h2>Score</h2>
+  <div class="teams">
+    <div class="team" data-team="home">
+      <div class="tname" id="homeLbl">LEFT</div>
+      <div class="score" id="homeScore">0</div>
+      <div class="row grow">
+        <button class="big" data-cmd='{"type":"score","team":"home","delta":-1}'>−1</button>
+        <button class="big" data-cmd='{"type":"score","team":"home","delta":1}'>+1</button>
+      </div>
+      <div class="row grow">
+        <button data-cmd='{"type":"score","team":"home","delta":2}'>+2</button>
+        <button data-cmd='{"type":"score","team":"home","delta":3}'>+3</button>
+        <button data-cmd='{"type":"score","team":"home","delta":6}'>+6 TD</button>
+      </div>
+      <div class="row">
+        <button data-cmd='{"type":"timeouts","team":"home","delta":-1}' title="Use a timeout (flashes on the bug)">− TO</button>
+        <div class="pips" id="homePips"><i></i><i></i><i></i></div>
+        <button data-cmd='{"type":"timeouts","team":"home","delta":1}'>+</button>
+      </div>
+      <div class="row grow"><button id="homeBall">Ball</button></div>
+    </div>
+    <div class="team" data-team="away">
+      <div class="tname" id="awayLbl">RIGHT</div>
+      <div class="score" id="awayScore">0</div>
+      <div class="row grow">
+        <button class="big" data-cmd='{"type":"score","team":"away","delta":-1}'>−1</button>
+        <button class="big" data-cmd='{"type":"score","team":"away","delta":1}'>+1</button>
+      </div>
+      <div class="row grow">
+        <button data-cmd='{"type":"score","team":"away","delta":2}'>+2</button>
+        <button data-cmd='{"type":"score","team":"away","delta":3}'>+3</button>
+        <button data-cmd='{"type":"score","team":"away","delta":6}'>+6 TD</button>
+      </div>
+      <div class="row">
+        <button data-cmd='{"type":"timeouts","team":"away","delta":-1}' title="Use a timeout (flashes on the bug)">− TO</button>
+        <div class="pips" id="awayPips"><i></i><i></i><i></i></div>
+        <button data-cmd='{"type":"timeouts","team":"away","delta":1}'>+</button>
+      </div>
+      <div class="row grow"><button id="awayBall">Ball</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- DOWN & DISTANCE -->
+<div class="card">
+  <h2>Down &amp; distance</h2>
+  <div class="row grow">
+    <button data-down="1">1st</button>
+    <button data-down="2">2nd</button>
+    <button data-down="3">3rd</button>
+    <button data-down="4">4th</button>
+  </div>
+  <div class="row">
+    <input id="dist" placeholder="yds" style="width:70px" inputmode="numeric">
+    <button id="distBtn">Set</button>
+    <button data-cmd='{"type":"down","down":1,"distance":"10"}'>1st &amp; 10</button>
+    <button data-cmd='{"type":"down","distance":"GOAL"}'>&amp; Goal</button>
+    <label class="muted"><input type="checkbox" id="showDown"> show</label>
+  </div>
+  <div class="muted" style="margin-top:6px" id="downNow"></div>
+</div>
+
+<!-- ALERTS -->
+<div class="card">
+  <h2>Alert banner (above the bug)</h2>
+  <div class="row grow">
+    <button data-alert="FLAG">Flag</button>
+    <button data-alert="FIELD GOAL">FG</button>
+    <button data-alert="TIMEOUT">Timeout</button>
+  </div>
+  <div class="row grow">
+    <button data-alert="REVIEW">Review</button>
+    <button data-alert="SAFETY">Safety</button>
+    <button data-alert="TURNOVER">Turnover</button>
+    <button data-alert="2 MIN WARNING">2 Min</button>
+  </div>
+  <div class="row">
+    <input id="alertTxt" placeholder="Custom" style="flex:1" maxlength="14">
+    <button id="alertBtn">Show</button>
+    <button data-cmd='{"type":"alert","text":""}'>Clear</button>
+  </div>
+</div>
+
+<!-- CLOCK -->
+<div class="card">
+  <h2>Clock</h2>
+  <div class="clock" id="clock">0:00</div>
+  <div class="row grow"><button class="big go" id="toggleBtn" data-cmd='{"type":"toggle"}'>Start</button></div>
+  <div class="row grow">
+    <button data-cmd='{"type":"adjust","ms":-60000}'>−1m</button>
+    <button data-cmd='{"type":"adjust","ms":-1000}'>−1s</button>
+    <button data-cmd='{"type":"adjust","ms":1000}'>+1s</button>
+    <button data-cmd='{"type":"adjust","ms":60000}'>+1m</button>
+  </div>
+  <div class="row">
+    <input id="setClock" placeholder="mm:ss" style="width:90px">
+    <button id="setClockBtn">Set</button>
+    <button data-cmd='{"type":"resetClock"}'>Reset</button>
+  </div>
+  <div class="row">
+    <select id="mode">
+      <option value="down">Count down</option>
+      <option value="up">Count up</option>
+    </select>
+    <input id="length" type="number" min="1" step="1" style="width:70px" title="Period length in minutes">
+    <span class="muted">min</span>
+    <button id="lengthBtn">Apply</button>
+  </div>
+</div>
+
+<!-- PERIOD -->
+<div class="card">
+  <h2>Period</h2>
+  <div class="row">
+    <button data-cmd='{"type":"period","delta":-1}'>−</button>
+    <span class="lbl" id="periodLbl">1ST</span>
+    <button data-cmd='{"type":"period","delta":1}'>+</button>
+    <input id="prefix" style="width:56px" title="Q = football quarters (1ST..4TH, OT). Anything else shows as prefix + number, e.g. H1">
+    <span class="muted">prefix</span>
+  </div>
+  <div class="row grow">
+    <button data-status="">Live</button>
+    <button data-status="HALFTIME">Halftime</button>
+    <button data-status="FINAL">Final</button>
+  </div>
+</div>
+
+<!-- TEAMS -->
+<div class="card">
+  <h2>Teams</h2>
+  <div class="teams">
+    <div class="tedit" data-team="home">
+      <span class="muted">Left side</span>
+      <input data-f="name" maxlength="18" placeholder="Name">
+      <div class="row">
+        <input data-f="rank" placeholder="Rank" style="width:64px" inputmode="numeric">
+        <input data-f="color" type="color">
+      </div>
+      <div class="row">
+        <img class="logo-prev" data-f="prev" alt="">
+        <button data-f="pick">Logo</button>
+        <button data-f="clear">✕</button>
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" data-f="file">
+      </div>
+    </div>
+    <div class="tedit" data-team="away">
+      <span class="muted">Right side</span>
+      <input data-f="name" maxlength="18" placeholder="Name">
+      <div class="row">
+        <input data-f="rank" placeholder="Rank" style="width:64px" inputmode="numeric">
+        <input data-f="color" type="color">
+      </div>
+      <div class="row">
+        <img class="logo-prev" data-f="prev" alt="">
+        <button data-f="pick">Logo</button>
+        <button data-f="clear">✕</button>
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" data-f="file">
+      </div>
+    </div>
+  </div>
+  <div class="muted" style="margin-top:6px">Use transparent PNGs for logos. Changes go live as soon as you leave a field.</div>
+  <div class="row" style="margin-top:8px">
+    <button data-cmd='{"type":"swap"}'>Swap sides</button>
+    <button class="warn" id="resetGame">Reset game</button>
+  </div>
+</div>
+
+<div class="muted" style="line-height:1.9">
+  <kbd>Space</kbd> clock · <kbd>Q</kbd>/<kbd>A</kbd> left +1/−1 · <kbd>P</kbd>/<kbd>L</kbd> right +1/−1 ·
+  <kbd>1</kbd>–<kbd>4</kbd> down · <kbd>Z</kbd>/<kbd>M</kbd> ball left/right · <kbd>F</kbd> flag · <kbd>H</kbd> hide
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+let S = null, offset = 0;
+
+const send = cmd => fetch('/cmd', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cmd)
+}).catch(() => {});
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.cmd) send(JSON.parse(b.dataset.cmd));
+  if (b.dataset.down) send({ type: 'down', down: Number(b.dataset.down) });
+  if (b.dataset.alert) send({ type: 'alert', text: S && S.alert === b.dataset.alert ? '' : b.dataset.alert });
+  if (b.dataset.status !== undefined) send({ type: 'status', status: b.dataset.status });
+});
+
+for (const t of ['home', 'away']) {
+  $(t + 'Ball').onclick = () => send({ type: 'possession', team: S && S.possession === t ? '' : t });
+}
+
+// Team editing: each field goes live on change
+$$('.tedit').forEach(box => {
+  const team = box.dataset.team;
+  const f = name => box.querySelector(`[data-f="${name}"]`);
+  const push = () => send({ type: 'teams', [team]: { name: f('name').value, rank: f('rank').value, color: f('color').value } });
+  f('name').onchange = push;
+  f('rank').onchange = push;
+  f('color').oninput = push;
+  f('pick').onclick = () => f('file').click();
+  f('clear').onclick = () => send({ type: 'clearLogo', team });
+  f('file').onchange = async () => {
+    const file = f('file').files[0];
+    if (!file) return;
+    const r = await fetch('/logo/' + team, { method: 'POST', headers: { 'Content-Type': file.type }, body: file }).catch(() => null);
+    if (!r || !r.ok) alert('Logo upload failed. Use PNG, JPG, WEBP, SVG or GIF under 8 MB.');
+    f('file').value = '';
+  };
+});
+
+function parseTime(str) {
+  str = String(str).trim();
+  if (!str) return null;
+  const parts = str.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  return parts.length === 1 ? parts[0] * 60000 : (parts[0] * 60 + parts[1]) * 1000;
+}
+
+$('setClockBtn').onclick = () => { const ms = parseTime($('setClock').value); if (ms !== null) send({ type: 'setClock', ms }); };
+$('setClock').onkeydown = e => { if (e.key === 'Enter') $('setClockBtn').click(); };
+$('mode').onchange = () => send({ type: 'mode', mode: $('mode').value });
+$('lengthBtn').onclick = () => { const m = Number($('length').value); if (m > 0) send({ type: 'length', ms: m * 60000 }); };
+$('prefix').onchange = () => send({ type: 'set', periodPrefix: $('prefix').value });
+$('distBtn').onclick = () => { const v = $('dist').value.trim(); if (v) send({ type: 'down', distance: v }); };
+$('dist').onkeydown = e => { if (e.key === 'Enter') $('distBtn').click(); };
+$('showDown').onchange = () => send({ type: 'down', showDown: $('showDown').checked });
+$('alertBtn').onclick = () => send({ type: 'alert', text: $('alertTxt').value });
+$('alertTxt').onkeydown = e => { if (e.key === 'Enter') $('alertBtn').click(); };
+$('resetGame').onclick = () => { if (confirm('Reset scores, timeouts, period, downs and clock?')) send({ type: 'resetGame' }); };
+$('visBtn').onclick = () => S && send({ type: 'set', visible: !S.visible });
+
+document.addEventListener('keydown', e => {
+  if (!S || e.target.matches('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const map = {
+    ' ': { type: 'toggle' },
+    q: { type: 'score', team: 'home', delta: 1 },
+    a: { type: 'score', team: 'home', delta: -1 },
+    p: { type: 'score', team: 'away', delta: 1 },
+    l: { type: 'score', team: 'away', delta: -1 },
+    z: { type: 'possession', team: S.possession === 'home' ? '' : 'home' },
+    m: { type: 'possession', team: S.possession === 'away' ? '' : 'away' },
+    f: { type: 'alert', text: S.alert === 'FLAG' ? '' : 'FLAG' },
+    h: { type: 'set', visible: !S.visible },
+    1: { type: 'down', down: 1 }, 2: { type: 'down', down: 2 },
+    3: { type: 'down', down: 3 }, 4: { type: 'down', down: 4 }
+  };
+  if (map[k]) { e.preventDefault(); send(map[k]); }
+});
+
+const sfx = n => (n % 100 >= 11 && n % 100 <= 13) ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' }[n % 10] || 'TH');
+const pad = n => String(n).padStart(2, '0');
+
+function periodText() {
+  if (S.periodPrefix === 'Q') {
+    if (S.period <= 4) return S.period + sfx(S.period);
+    const ot = S.period - 4;
+    return ot === 1 ? 'OT' : ot + 'OT';
+  }
+  return S.periodPrefix + S.period;
+}
+
+function setIfIdle(el, val, prop = 'value') {
+  if (document.activeElement !== el && el[prop] !== val) el[prop] = val;
+}
+
+function render() {
+  for (const t of ['home', 'away']) {
+    const d = S[t];
+    $(t + 'Score').textContent = d.score;
+    $(t + 'Lbl').textContent = d.name || (t === 'home' ? 'LEFT' : 'RIGHT');
+    document.querySelector(`.team[data-team="${t}"]`).style.setProperty('--c', d.color);
+    [...$(t + 'Pips').children].forEach((p, i) => p.classList.toggle('used', i >= d.timeouts));
+    $(t + 'Ball').classList.toggle('on', S.possession === t);
+
+    const box = document.querySelector(`.tedit[data-team="${t}"]`);
+    setIfIdle(box.querySelector('[data-f="name"]'), d.name);
+    setIfIdle(box.querySelector('[data-f="rank"]'), d.rank);
+    setIfIdle(box.querySelector('[data-f="color"]'), d.color);
+    const prev = box.querySelector('[data-f="prev"]');
+    const src = d.logo ? '/logos/' + d.logo : '';
+    if (prev.getAttribute('src') !== src) { if (src) prev.src = src; else prev.removeAttribute('src'); }
+    prev.style.visibility = src ? 'visible' : 'hidden';
+  }
+
+  const running = !!S.clock.startedAt;
+  $('toggleBtn').textContent = running ? 'Stop' : 'Start';
+  $('toggleBtn').className = 'big ' + (running ? 'stop' : 'go');
+  $('periodLbl').textContent = periodText();
+  setIfIdle($('prefix'), S.periodPrefix);
+  setIfIdle($('mode'), S.clock.mode);
+  setIfIdle($('length'), String(Math.round(S.clock.lengthMs / 60000)));
+  setIfIdle($('showDown'), S.showDown, 'checked');
+
+  $$('[data-down]').forEach(b => b.classList.toggle('on', Number(b.dataset.down) === S.down));
+  $$('[data-alert]').forEach(b => b.classList.toggle('on', b.dataset.alert === S.alert));
+  $$('[data-status]').forEach(b => b.classList.toggle('on', b.dataset.status === S.status));
+  $('downNow').textContent = `On air: ${S.down}${sfx(S.down)} & ${S.distance}${S.showDown ? '' : ' (hidden)'}`;
+  $('visBtn').textContent = S.visible ? 'Hide bug' : 'Show bug';
+}
+
+function tick() {
+  if (S) {
+    const c = S.clock;
+    const e = c.baseMs + (c.startedAt ? Date.now() + offset - c.startedAt : 0);
+    let txt;
+    if (c.mode === 'down') {
+      const secs = Math.ceil(Math.max(0, c.lengthMs - e) / 1000);
+      txt = secs < 60 ? ':' + pad(secs) : Math.floor(secs / 60) + ':' + pad(secs % 60);
+    } else {
+      const s = Math.floor(Math.max(0, e) / 1000);
+      txt = Math.floor(s / 60) + ':' + pad(s % 60);
+    }
+    if ($('clock').textContent !== txt) $('clock').textContent = txt;
+  }
+  requestAnimationFrame(tick);
+}
+
+const es = new EventSource('/events');
+es.onopen = () => { $('dot').className = 'dot ok'; $('conn').textContent = 'Connected'; };
+es.onerror = () => { $('dot').className = 'dot'; $('conn').textContent = 'Disconnected, retrying'; };
+es.onmessage = e => {
+  const d = JSON.parse(e.data);
+  offset = d.serverNow - Date.now();
+  S = d.state;
+  render();
+};
+tick();
+</script>
+</body>
+</html>

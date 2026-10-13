@@ -1,0 +1,446 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Score Bug</title>
+<style>
+  @font-face { font-family: 'BC'; src: url('/fonts/bc-600.woff2') format('woff2'); font-weight: 600; }
+  @font-face { font-family: 'BC'; src: url('/fonts/bc-700.woff2') format('woff2'); font-weight: 700; }
+  @font-face { font-family: 'BC'; src: url('/fonts/bc-800.woff2') format('woff2'); font-weight: 800; }
+
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  body { width: 1920px; height: 1080px; font-family: 'BC', 'Arial Narrow', Arial, sans-serif; color: #fff; }
+
+  .wrap {
+    position: absolute; left: 50%; bottom: 64px;
+    transform: translateX(-50%);
+    transition: transform .55s cubic-bezier(.2,.8,.2,1), opacity .4s;
+    filter: drop-shadow(0 8px 18px rgba(0,0,0,.45));
+  }
+  .wrap.hidden { transform: translate(-50%, 180%); opacity: 0; }
+
+  /* ---------- top bar ---------- */
+  .top { display: grid; grid-template-columns: 1fr 4px 1fr; height: 78px; }
+  .gap { background: #0b0c0e; }
+
+  .side {
+    position: relative; display: flex; align-items: stretch;
+    color: var(--fg);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0) 45%, rgba(0,0,0,.22)),
+      var(--c);
+    transition: background-color .4s;
+  }
+  /* paper texture, blended over every colored surface */
+  .side::before, .bottom::before, .banner::before, .flood::before, .fill::before, .bfill::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: url('/textures/paper.png') center / 960px 300px;
+    mix-blend-mode: overlay; opacity: var(--paper, .9);
+  }
+  .away::before { background-position: right center; }
+  .flood::before, .fill::before { background-size: 1300px 406px; }   /* wider than the bar, so no seam */
+  .bottom::before { background-position: 30% 70%; }
+  .away { flex-direction: row-reverse; }
+
+  .logo { position: relative; width: 24px; flex: none; }
+  .side.has-logo .logo { width: 132px; }
+  .logo img {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    height: 124px; max-width: 160px; object-fit: contain; display: none;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,.55));
+  }
+  .side.has-logo .logo img { display: block; }
+  .home .logo img { left: 38%; }
+  .away .logo img { left: 62%; }
+
+  .rank {
+    position: absolute; top: -34px; font-size: 36px; font-weight: 800; font-style: italic;
+    color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,.7), 0 0 1px #000; display: none; z-index: 2;
+  }
+  .rank.on { display: block; }
+  .home .rank { left: 4px; }
+  .away .rank { right: 4px; }
+
+  .nameblock {
+    position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center;
+    padding: 0 26px; min-width: 240px;
+  }
+  .home .nameblock { align-items: flex-end; }
+  .away .nameblock { align-items: flex-start; }
+  .name { font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: .5px; white-space: nowrap; }
+
+  .tos { display: flex; gap: 7px; margin-top: 7px; }
+  .tos i { width: 24px; height: 5px; background: currentColor; opacity: .95; transition: opacity .3s; }
+  .tos i.used { opacity: .22; }
+
+  .score {
+    position: relative; width: 112px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 74px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  /* score digits roll vertically when they change */
+  .num { position: absolute; inset: 0; overflow: hidden; }
+  .num span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; will-change: transform; }
+  .poss {
+    position: absolute; left: 16px; right: 16px; bottom: 0; height: 7px;
+    background: #ffc72c; transform: scaleX(0); transition: transform .35s ease;
+  }
+  .poss.on { transform: scaleX(1); }
+  .side.light .poss { background: #111; }
+
+  /* ---------- sub bar ---------- */
+  .bottom {
+    position: relative; display: flex; justify-content: center; width: fit-content; min-width: 480px;
+    margin: 0 auto; height: 54px;
+    background: linear-gradient(180deg, #1c1f24, #0d0f12);
+    border: 2px solid rgba(255,255,255,.55); border-top: none;
+    font-size: 40px; font-weight: 700; letter-spacing: .5px;
+  }
+  .seg { display: flex; align-items: center; justify-content: center; padding: 0 30px; white-space: nowrap; }
+  .seg.off { display: none; }
+  .sfx { font-size: .68em; margin-left: 1px; align-self: center; position: relative; top: 2px; }
+  .clock { min-width: 112px; font-variant-numeric: tabular-nums; }
+  .clock.low { color: #ffc72c; }
+  /* ---------- alert banner (slides up out of the top bar) ---------- */
+  .top { position: relative; isolation: isolate; }
+  .banner {
+    position: absolute; left: 50%; bottom: 100%; z-index: -1;
+    min-width: 210px; height: 28px; padding: 0 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; letter-spacing: 3px; white-space: nowrap;
+    background: var(--bg); color: var(--fg);
+    border: 1.5px solid rgba(255,255,255,.55); border-bottom: none;
+    transform: translate(-50%, 100%);
+    transition: transform .4s cubic-bezier(.2,.8,.2,1);
+  }
+  .banner.on { transform: translate(-50%, 0); }
+  .banner.on span { animation: flash 1.2s ease-in-out infinite; }
+  @keyframes flash { 50% { opacity: .55; } }
+  .status { color: #fff; font-weight: 800; letter-spacing: 2px; }
+  /* ---------- touchdown flood ---------- */
+  .flood {
+    position: absolute; inset: 0; z-index: 5; pointer-events: none;
+    display: flex; align-items: center; justify-content: center; gap: 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0) 45%, rgba(0,0,0,.22)), var(--tdc);
+    color: var(--tdfg);
+    clip-path: inset(0 100% 0 0);
+  }
+  .flood img { height: 66px; max-width: 110px; object-fit: contain; display: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+  .flood img.on { display: block; }
+  .ftxt { display: flex; align-items: baseline; gap: 18px; white-space: nowrap; }
+  .ftxt span { font-size: 34px; font-weight: 700; letter-spacing: 1px; opacity: .85; }
+  .ftxt b { font-size: 60px; font-weight: 800; letter-spacing: 8px; }
+  .flood.on .ftxt { animation: tdtext .7s .25s both cubic-bezier(.2,.8,.2,1); }
+  @keyframes tdtext { from { opacity: 0; letter-spacing: 30px; } to { opacity: 1; } }
+  .wrap .logo img, .wrap .rank { transition: opacity .3s; }
+  .wrap.td .logo img, .wrap.td .rank { opacity: 0; }
+  .bottom { transition: background .4s, color .4s; }
+  .wrap.td .bottom { background: var(--tdc); color: var(--tdfg); }
+
+  /* ---------- timeout flash ---------- */
+  .tflash {
+    position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; color: var(--tcol);
+    font-size: 46px; font-weight: 800; letter-spacing: 6px;
+  }
+  .tflash.go { animation: tflash 2.6s ease-in-out both; }
+  .side.flashing .logo img, .side.flashing .rank { opacity: 0; }
+  @keyframes tflash {
+    0% { opacity: 0; } 7% { opacity: 1; } 18% { opacity: .1; } 29% { opacity: 1; }
+    40% { opacity: .1; } 51% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; }
+  }
+  /* ---------- flag / review fill (bottom to top) ---------- */
+  .fill, .bfill {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0) 45%, rgba(0,0,0,.18)), var(--fc);
+    clip-path: inset(100% 0 0 0);
+  }
+  .fill { z-index: 6; display: flex; align-items: center; justify-content: center;
+          color: var(--ffg); font-size: 62px; font-weight: 800; letter-spacing: 12px; white-space: nowrap; }
+  .bfill { z-index: 3; }
+  .fill b { opacity: 0; }
+  .fill.on b { animation: filltxt .5s .45s both cubic-bezier(.2,.8,.2,1); }
+  @keyframes filltxt { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  .wrap.filling .logo img, .wrap.filling .rank { opacity: 0; }
+</style>
+</head>
+<body>
+<div class="wrap hidden" id="wrap">
+  <div class="top">
+    <div class="banner" id="banner"><span id="bannerTxt"></span></div>
+    <div class="fill" id="fill"><b id="fillTxt"></b></div>
+    <div class="flood" id="flood"><img id="floodLogo" alt=""><div class="ftxt"><span id="floodTeam"></span><b>TOUCHDOWN</b></div></div>
+    <div class="side home" id="home">
+      <div class="logo"><img id="homeLogo" alt=""><div class="rank" id="homeRank"></div></div>
+      <div class="nameblock">
+        <div class="name" id="homeName"></div>
+        <div class="tos" id="homeTos"><i></i><i></i><i></i></div>
+      </div>
+      <div class="score" id="homeScore"><div class="num" id="homeNum"></div><div class="poss" id="homePoss"></div></div>
+      <div class="tflash" id="homeFlash">TIMEOUT</div>
+    </div>
+    <div class="gap"></div>
+    <div class="side away" id="away">
+      <div class="logo"><img id="awayLogo" alt=""><div class="rank" id="awayRank"></div></div>
+      <div class="nameblock">
+        <div class="name" id="awayName"></div>
+        <div class="tos" id="awayTos"><i></i><i></i><i></i></div>
+      </div>
+      <div class="score" id="awayScore"><div class="num" id="awayNum"></div><div class="poss" id="awayPoss"></div></div>
+      <div class="tflash" id="awayFlash">TIMEOUT</div>
+    </div>
+  </div>
+  <div class="bottom">
+    <div class="bfill" id="bfill"></div>
+    <div class="seg" id="period"></div>
+    <div class="seg clock" id="clock">0:00</div>
+    <div class="seg status off" id="status"></div>
+    <div class="seg" id="down"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, offset = 0;
+// alert banner colors: [background, text]
+const BANNER = {
+  FLAG:    ['#ffc72c', '#111'],
+  REVIEW:  ['#c8102e', '#fff'],
+  default: ['#f4f5f7', '#111']
+};
+
+const sfx = n => (n % 100 >= 11 && n % 100 <= 13) ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' }[n % 10] || 'TH');
+const ord = n => `${n}<span class="sfx">${sfx(n)}</span>`;
+const pad = n => String(n).padStart(2, '0');
+
+function textColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => {
+    v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+  });
+  return (.2126 * r + .7152 * g + .0722 * b) > .5 ? '#111' : '#fff';
+}
+
+function periodHTML() {
+  if (S.periodPrefix === 'Q') {
+    if (S.period <= 4) return ord(S.period);
+    const ot = S.period - 4;
+    return ot === 1 ? 'OT' : ot + 'OT';
+  }
+  return S.periodPrefix + S.period;
+}
+
+function clockText() {
+  const c = S.clock;
+  const e = c.baseMs + (c.startedAt ? Date.now() + offset - c.startedAt : 0);
+  if (c.mode === 'down') {
+    const secs = Math.ceil(Math.max(0, c.lengthMs - e) / 1000);
+    return secs < 60 ? [':' + pad(secs), secs <= 10 && secs > 0 && !!c.startedAt] : [Math.floor(secs / 60) + ':' + pad(secs % 60), false];
+  }
+  const s = Math.floor(Math.max(0, e) / 1000);
+  return [Math.floor(s / 60) + ':' + pad(s % 60), false];
+}
+
+// ---------- score roll ----------
+const shown = { home: null, away: null };   // what's currently on screen
+let tdHold = null;                           // team whose roll waits for the TD flood to clear
+
+function setScore(t, val) {
+  if (shown[t] === null) {                   // first load: no animation
+    $(t + 'Num').innerHTML = `<span>${val}</span>`;
+    shown[t] = val;
+    return;
+  }
+  if (val === shown[t] || tdHold === t) return;
+  roll(t, val);
+}
+
+function roll(t, val) {
+  const up = val > shown[t];
+  shown[t] = val;
+  const num = $(t + 'Num');
+  const olds = [...num.children];
+  olds.slice(0, -1).forEach(o => o.remove());          // rapid clicks: drop stale digits
+  const old = olds[olds.length - 1];
+  const nu = document.createElement('span');
+  nu.textContent = val;
+  num.appendChild(nu);
+  const opts = { duration: 700, easing: 'cubic-bezier(.3,.75,.15,1)', fill: 'forwards' };
+  if (old) {
+    old.getAnimations().forEach(a => a.cancel());
+    old.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${up ? -110 : 110}%)` }], opts)
+       .onfinish = () => old.remove();
+  }
+  nu.animate([{ transform: `translateY(${up ? 110 : -110}%)` }, { transform: 'translateY(0)' }], opts);
+}
+
+function render() {
+  for (const t of ['home', 'away']) {
+    const d = S[t], side = $(t);
+    side.style.setProperty('--c', d.color);
+    const fg = textColor(d.color);
+    side.style.setProperty('--fg', fg);
+    side.classList.toggle('light', fg === '#111');
+    side.style.setProperty('--tcol', fg === '#111' ? '#111' : d.color);
+    $(t + 'Name').textContent = d.name;
+
+    const img = $(t + 'Logo');
+    if (d.logo) {
+      const src = '/logos/' + d.logo;
+      if (img.getAttribute('src') !== src) img.src = src;
+    }
+    side.classList.toggle('has-logo', !!d.logo);
+
+    $(t + 'Rank').textContent = d.rank ? '#' + d.rank : '';
+    $(t + 'Rank').classList.toggle('on', !!d.rank);
+
+    [...$(t + 'Tos').children].forEach((pip, i) => pip.classList.toggle('used', i >= d.timeouts));
+    $(t + 'Poss').classList.toggle('on', S.possession === t);
+
+    setScore(t, d.score);
+  }
+
+  const live = !S.status;
+  $('period').innerHTML = periodHTML();
+  $('period').classList.toggle('off', !live);
+  $('clock').classList.toggle('off', !live);
+  $('status').textContent = S.status;
+  $('status').classList.toggle('off', live);
+
+  const down = $('down');
+  down.innerHTML = `${ord(S.down)}&nbsp;&amp;&nbsp;${S.distance}`;
+  down.className = 'seg' + (S.showDown && live ? '' : ' off');
+
+  const banner = $('banner');
+  if (S.alert) {
+    const look = BANNER[S.alert] || BANNER.default;
+    $('bannerTxt').textContent = S.alert;
+    banner.style.setProperty('--bg', look[0]);
+    banner.style.setProperty('--fg', look[1]);
+  }
+  banner.classList.toggle('on', !!S.alert);
+  $('wrap').classList.toggle('hidden', !S.visible);
+}
+
+function tick() {
+  if (S) {
+    const [t, low] = clockText();
+    const el = $('clock');
+    if (el.textContent !== t) el.textContent = t;
+    el.classList.toggle('low', low);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- event animations ----------
+let lastEvent = null, tdTimer = null;
+
+function playTouchdown(team) {
+  const d = S[team], wrap = $('wrap'), flood = $('flood');
+  const fg = textColor(d.color);
+  wrap.style.setProperty('--tdc', d.color);
+  wrap.style.setProperty('--tdfg', fg);
+  $('floodTeam').textContent = d.name;
+  const img = $('floodLogo');
+  if (d.logo) img.src = '/logos/' + d.logo;
+  img.classList.toggle('on', !!d.logo);
+
+  const fromLeft = team === 'home';
+  const hiddenIn  = fromLeft ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)';
+  const hiddenOut = fromLeft ? 'inset(0 0 0 100%)' : 'inset(0 100% 0 0)';
+  clearTimeout(tdTimer);
+  if (tdHold && tdHold !== team) roll(tdHold, S[tdHold].score);   // a new TD interrupts an old one
+  tdHold = team;
+  flood.getAnimations().forEach(a => a.cancel());
+  flood.classList.remove('on'); void flood.offsetWidth; flood.classList.add('on');
+  wrap.classList.add('td');
+  flood.animate([{ clipPath: hiddenIn }, { clipPath: 'inset(0 0 0 0)' }],
+    { duration: 500, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' });
+  tdTimer = setTimeout(() => {
+    flood.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: hiddenOut }],
+      { duration: 500, easing: 'cubic-bezier(.6,0,.4,1)', fill: 'forwards' });
+    wrap.classList.remove('td');
+    setTimeout(() => {
+      flood.classList.remove('on');
+      const held = tdHold; tdHold = null;
+      if (held && S[held].score !== shown[held]) roll(held, S[held].score);   // reveal the TD score
+    }, 300);
+  }, 4500);
+}
+
+function playTimeout(team) {
+  const el = $(team + 'Flash');
+  el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+  const side = $(team);
+  side.classList.add('flashing');
+  clearTimeout(side._t);
+  side._t = setTimeout(() => side.classList.remove('flashing'), 2500);
+}
+
+// ---------- flag / review fill ----------
+const FILLS = {
+  FLAG:   { color: '#ffc72c', fg: '#111', text: 'FLAG' },
+  REVIEW: { color: '#c8102e', fg: '#fff', text: 'UNDER REVIEW' }
+};
+let prevAlert, fillTimer = null;
+
+function playFill(kind) {
+  const f = FILLS[kind], wrap = $('wrap'), top = $('fill'), bot = $('bfill');
+  wrap.style.setProperty('--fc', f.color);
+  wrap.style.setProperty('--ffg', f.fg);
+  $('fillTxt').textContent = f.text;
+  clearTimeout(fillTimer);
+  [top, bot].forEach(el => el.getAnimations().forEach(a => a.cancel()));
+  top.classList.remove('on'); void top.offsetWidth; top.classList.add('on');
+  wrap.classList.add('filling');
+
+  const hidden = 'inset(100% 0 0 0)', full = 'inset(0 0 0 0)';
+  const rise = { easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' };
+  bot.animate([{ clipPath: hidden }, { clipPath: full }], { ...rise, duration: 220 });                // sub-bar first
+  top.animate([{ clipPath: hidden }, { clipPath: full }], { ...rise, duration: 420, delay: 180 });   // then the main bar
+
+  fillTimer = setTimeout(endFill, 3400);
+}
+
+function endFill() {
+  const top = $('fill'), bot = $('bfill');
+  if (!top.classList.contains('on')) return;
+  clearTimeout(fillTimer);
+  const drain = { easing: 'cubic-bezier(.6,0,.6,1)', fill: 'forwards' };
+  top.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(100% 0 0 0)' }], { ...drain, duration: 380 });
+  bot.animate([{ clipPath: 'inset(0 0 0 0)' }, { clipPath: 'inset(100% 0 0 0)' }], { ...drain, duration: 220, delay: 300 });
+  setTimeout(() => { top.classList.remove('on'); $('wrap').classList.remove('filling'); }, 520);
+}
+
+function handleAlert() {
+  const a = S.alert || '';
+  if (prevAlert !== undefined && a !== prevAlert) {
+    if (FILLS[a]) playFill(a);
+    else endFill();                       // cleared or switched to another alert
+  }
+  prevAlert = a;
+}
+
+function handleEvent() {
+  const ev = S.event;
+  if (!ev || ev.id === lastEvent) return;
+  lastEvent = ev.id;
+  if (Date.now() + offset - ev.at > 4000) return;   // don't replay old events on reload
+  if (ev.kind === 'td') playTouchdown(ev.team);
+  if (ev.kind === 'timeout') playTimeout(ev.team);
+}
+
+const es = new EventSource('/events');
+es.onmessage = e => {
+  const d = JSON.parse(e.data);
+  offset = d.serverNow - Date.now();
+  S = d.state;
+  handleEvent();
+  render();
+  handleAlert();
+};
+tick();
+</script>
+</body>
+</html>
